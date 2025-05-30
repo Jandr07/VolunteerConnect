@@ -47,10 +47,16 @@ export default function SignUpPage() {
       });
 
       router.push('/'); // Redirect to homepage (or dashboard)
-    } catch (err: any) {
-      setError(err.message);
-      console.error("Failed to sign up:", err);
-    } finally {
+    } catch (err: unknown) { // Changed from any to unknown
+        console.error("Failed to sign up:", err); // Log the full error
+        if (err instanceof Error) {
+          setError(err.message);
+        } else if (typeof err === 'string') {
+          setError(err);
+        } else {
+          setError('An unexpected error occurred during signup.');
+        }
+      } finally {
       setLoading(false);
     }
   };

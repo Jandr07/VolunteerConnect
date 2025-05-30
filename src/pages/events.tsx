@@ -10,8 +10,7 @@ import {
   addDoc,
   serverTimestamp,
   query,
-  where,
-  Timestamp, // Import Timestamp if you're using it directly
+  where, // Import Timestamp if you're using it directly
   getCountFromServer
 } from "firebase/firestore";
 
@@ -60,8 +59,9 @@ export default function Home() {
         });        
         const eventsList = await Promise.all(eventsListPromises);
         setEvents(eventsList);
-      } catch (error) {
-        console.error("Error fetching events:", error);
+      } catch (error: unknown) {
+        console.error("Error fetching created events:", error);
+        // Optionally set an error state to display to the user
       }
     };
 

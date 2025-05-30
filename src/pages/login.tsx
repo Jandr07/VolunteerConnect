@@ -19,12 +19,16 @@ export default function LoginPage() {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       router.push('/'); // Redirect to homepage after successful login
-    } catch (err: any) {
-      setError(err.message);
-      console.error("Failed to log in:", err);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err: unknown)  { // Changed from any to unknown
+        console.error("Detailed login error:", err); // Log the full error
+        if (err instanceof Error) {
+          setError(err.message);
+        } else if (typeof err === 'string') {
+          setError(err);
+        } else {
+          setError('An unexpected error occurred during login.');
+        }
+      }
   };
 
   return (
@@ -59,7 +63,7 @@ export default function LoginPage() {
         </button>
       </form>
       <p>
-        Don't have an account? <Link href="/signup">Sign up here</Link>
+       Don&apos;t have an account? <Link href="/signup">Sign up here</Link>
       </p>
     </div>
   );

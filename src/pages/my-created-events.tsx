@@ -79,7 +79,7 @@ export default function MyCreatedEventsPage() {
     <div style={{ padding: '20px' }}>
       <h1>My Created Events</h1>
       {myEvents.length === 0 ? (
-        <p>You haven't created any events yet. <Link href="/create-event">Create one now!</Link></p>
+        <p>You haven&apos;t created any events yet. <Link href="/create-event">Create one now!</Link></p>
       ) : (
         <ul style={{ listStyle: 'none', padding: 0 }}>
           {myEvents.map((event) => (
