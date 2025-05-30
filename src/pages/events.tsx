@@ -1,7 +1,6 @@
 // src/pages/index.tsx
 import { useEffect, useState } from "react";
 import Link from 'next/link';
-import { useRouter } from 'next/router'; // Import useRouter
 import { db } from "@/lib/firebase"; // Your existing import
 import { useAuth } from '../context/AuthContext'; // Assuming AuthContext.tsx is in src/context
 import {
@@ -30,8 +29,8 @@ export interface Event {
 
 export default function Home() {
   const [events, setEvents] = useState<Event[]>([]);
-  const { user, loading: authLoading, logout } = useAuth(); // Use authLoading to avoid conflict
-  const router = useRouter(); // Initialize router
+  const { user, loading: authLoading } = useAuth(); // Use authLoading to avoid conflict
+  
 
   const [signupMessage, setSignupMessage] = useState<{ [key: string]: string }>({});
   const [signupLoading, setSignupLoading] = useState<{ [key: string]: boolean }>({});
@@ -169,13 +168,15 @@ export default function Home() {
         return e;
       }));
   
-    } catch (error: any) {
-      console.error("Error signing up for event:", error);
-      setSignupMessage(prev => ({ 
-        ...prev, 
-        [event.id]: `Failed to sign up: ${error.message || 'An unknown error occurred.'}` 
-      }));
-    } finally {
+    } catch (error: unknown) { // Change from any
+        console.error("Error signing up for event:", error);
+        // Update your setSignupMessage logic to handle 'unknown'
+        if (error instanceof Error) {
+          setSignupMessage(prev => ({ ...prev, [event.id]: `Failed to sign up: ${error.message}` }));
+        } else {
+          setSignupMessage(prev => ({ ...prev, [event.id]: `Failed to sign up: An unknown error occurred.` }));
+        }
+      } finally {
       setSignupLoading(prev => ({ ...prev, [event.id]: false }));
     }
   };
@@ -190,7 +191,7 @@ export default function Home() {
     // If it's an ISO string or number (milliseconds)
     try {
       return new Date(dateInput).toLocaleDateString();
-    } catch (e) {
+    } catch (_e) {
       return String(dateInput); // Fallback to string representation
     }
   };

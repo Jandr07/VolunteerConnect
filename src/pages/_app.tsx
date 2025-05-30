@@ -4,6 +4,16 @@ import Head from 'next/head';
 import { AuthProvider } from '../context/AuthContext'; // Adjust path
 import Layout from '../components/Layout';           // Import the Layout component
 import '../styles/globals.css';
+import type { NextComponentType, NextPageContext } from 'next'; // Import these
+
+
+type ComponentWithPageTitle = NextComponentType<NextPageContext, any, any> & {
+  pageTitle?: string;
+};
+
+interface MyAppProps extends AppProps {
+  Component: ComponentWithPageTitle;
+}
 
 function MyApp({ Component, pageProps }: AppProps) {
   return (

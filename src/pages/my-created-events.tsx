@@ -1,7 +1,7 @@
 // src/pages/my-created-events.tsx
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '../context/AuthContext'; // Adjust path
 import { Event } from '../pages/events'; // Assuming you have src/types/index.ts or adjust path
@@ -44,9 +44,10 @@ export default function MyCreatedEventsPage() {
           });
           const eventsData = await Promise.all(eventsDataPromises);
           setMyEvents(eventsData);
-        } catch (error) {
-          console.error("Error fetching created events:", error);
-        } finally {
+        } catch (error: unknown) {
+            console.error("Error fetching created events:", error);
+            // Optionally set an error state
+          } finally {
           setLoadingEvents(false);
         }
       };
@@ -69,7 +70,7 @@ export default function MyCreatedEventsPage() {
     }
     try {
       return new Date(dateInput).toLocaleDateString();
-    } catch (e) {
+    } catch (_e) {
       return String(dateInput);
     }
   };

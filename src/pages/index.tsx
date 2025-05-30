@@ -12,7 +12,7 @@ export default function AboutPage() {
           </h2>
           <p style={{ fontSize: '1.3em', lineHeight: '1.7', color: '#5d4037' }}>
             Your central hub for discovering and participating in volunteer opportunities right here in Stowe, PA, and our surrounding community.
-            Whether you're looking to lend a hand, meet new people, or make a tangible difference, VolunteerConnect makes it simple and enjoyable.
+            Whether you&apos;re looking to lend a hand, meet new people, or make a tangible difference, VolunteerConnect makes it simple and enjoyable.
           </p>
         </section>
 

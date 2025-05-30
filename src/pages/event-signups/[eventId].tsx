@@ -1,7 +1,7 @@
 // src/pages/event-signups/[eventId].tsx
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
-import { doc, getDoc, collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '../../context/AuthContext'; // Adjust path
 import { Event } from '../../pages/events'; // Adjust path
@@ -48,7 +48,7 @@ export default function EventSignupsPage() {
             return;
           }
 
-          const eventData = { id: eventSnap.id, ...eventSnap.data() } as Event;
+          const eventData = { id: eventSnap.id, ...eventSnap.data() } as unknown as Event;
           
           // 2. Authorization: Check if current user is the event creator
           if (eventData.creatorId !== user.uid) {
@@ -70,10 +70,14 @@ export default function EventSignupsPage() {
           })) as Signup[];
           setSignups(signupsData);
 
-        } catch (err: any) {
-          console.error("Error fetching event/signups:", err);
-          setError(err.message || "Failed to load data.");
-        } finally {
+        } catch (err: unknown) {
+            console.error("Error fetching event/signups:", err);
+            if (err instanceof Error) {
+              setError(err.message);
+            } else {
+              setError("Failed to load event signup data.");
+            }
+          } finally {
           setLoadingData(false);
         }
       };
@@ -92,7 +96,7 @@ export default function EventSignupsPage() {
     }
     try {
       return new Date(dateInput).toLocaleDateString();
-    } catch (e) {
+    } catch (_e) {
       return String(dateInput);
     }
   };

@@ -1,7 +1,7 @@
 // src/context/AuthContext.tsx
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { onAuthStateChanged, User as FirebaseUser, signOut as firebaseSignOut } from 'firebase/auth';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore'; // Import getDoc or onSnapshot
+import { doc, onSnapshot } from 'firebase/firestore'; // Import getDoc or onSnapshot
 import { auth, db } from '@/lib/firebase';
 
 // Define a more detailed User type for your context

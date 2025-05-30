@@ -60,10 +60,16 @@ export default function CreateEventPage() {
       });
       // Optionally, redirect to a "my events" page or the new event's page
       router.push('/'); // Redirect to homepage for now
-    } catch (err: any) {
-      console.error("Error creating event:", err);
-      setError(err.message || "Failed to create event.");
-    } finally {
+    } catch (err: unknown) {
+        console.error("Error creating event:", err);
+        if (err instanceof Error) {
+          setError(err.message);
+        } else if (typeof err === 'string') {
+          setError(err);
+        } else {
+          setError("An unexpected error occurred while creating the event.");
+        }
+      } finally {
       setLoading(false);
     }
   };
