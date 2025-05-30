@@ -3,7 +3,7 @@ import type { AppProps } from 'next/app';
 import Head from 'next/head';
 import { AuthProvider } from '../context/AuthContext'; // Adjust path
 import Layout from '../components/Layout';           // Import the Layout component
-import '../styles/globals.css';
+import '../styles/global.css';
 import type { NextComponentType, NextPageContext } from 'next'; // Import these
 
 
