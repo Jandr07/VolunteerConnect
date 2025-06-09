@@ -15,14 +15,25 @@
   flex-direction: column;
 }
 
+/* Find and replace your existing .app-header rule with this */
 .app-header {
-  padding: 15px 0; /* Adjusted padding */
+  /* ... keep existing properties like padding, border, etc. ... */
+  padding: 15px 0;
   border-bottom: 1px solid #fbc02d;
   background-color: #fffde7;
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  
+  /* --- New properties for the hide/show effect --- */
   position: sticky;
   top: 0;
   z-index: 1000;
+  transition: transform 0.3s ease-in-out; /* Smooth transition */
+  will-change: transform; /* Hint for browser optimization */
+}
+
+/* New class to hide the header by moving it up */
+.app-header.header-hidden {
+  transform: translateY(-100%);
 }
 
 .main-nav {
