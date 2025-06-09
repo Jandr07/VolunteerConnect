@@ -4,3 +4,106 @@
     margin: 20px auto;
     padding: 20px;
   }
+
+ /* --- Layout & Header Base Styles --- */
+.app-container {
+  font-family: 'Kalam', cursive, sans-serif;
+  background-color: #fffbef;
+  color: #4a4a4a;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  padding: 15px 0; /* Adjusted padding */
+  border-bottom: 1px solid #fbc02d;
+  background-color: #fffde7;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.main-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap; /* Allow wrapping on all screen sizes */
+  gap: 20px; /* Gap between logo and links container */
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.logo-title {
+  margin: 0;
+  font-size: 2.2em;
+  color: #c79100;
+  font-family: 'Patrick Hand', cursive;
+  text-decoration: none;
+}
+
+/* --- Navigation Link Styling --- */
+.nav-links {
+  display: flex;
+  flex-wrap: wrap; /* This is key: allows links to wrap to the next line */
+  justify-content: flex-end; /* Align links to the right on desktop */
+  align-items: center;
+  gap: 10px 15px; /* Vertical and horizontal gap between links */
+}
+
+.nav-links a, .button-link {
+  color: #5d4037;
+  text-decoration: none;
+  font-weight: bold;
+  font-family: 'Kalam', cursive;
+  font-size: 1.1em;
+  padding: 8px 12px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+  white-space: nowrap; /* Prevents a single link from breaking into two lines */
+}
+
+.nav-links a:hover {
+  background-color: #fef9c3; /* Light yellow hover */
+}
+
+/* --- Responsive Styles for Smaller Screens --- */
+@media (max-width: 900px) { /* This breakpoint targets tablets and phones */
+  .main-nav {
+    flex-direction: column; /* Stack logo and links vertically */
+    justify-content: center; /* Center the stacked items */
+    gap: 15px; /* Adjust gap for vertical stacking */
+  }
+
+  .nav-links {
+    justify-content: center; /* Center the links when they are stacked */
+    width: 100%; /* Ensure link container takes full width */
+  }
+}
+
+
+/* --- Page Content & Footer Styles --- */
+.page-content {
+  flex-grow: 1;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 30px 20px;
+}
+
+.app-footer {
+  text-align: center;
+  margin-top: auto;
+  padding: 30px 0;
+  border-top: 1px solid #fbc02d;
+  color: #777;
+  font-size: 0.95em;
+  background-color: #fffde7;
+}
+
+.footer-inspiration {
+  font-size: 0.8em;
+  margin-top: 5px;
+}
