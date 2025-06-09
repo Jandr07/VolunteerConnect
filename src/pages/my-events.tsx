@@ -1,10 +1,11 @@
 // src/pages/my-events.tsx
 import { useEffect, useState } from 'react';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, removeSignup } from '@/lib/firebase'; // Import removeSignup
 import { useRouter } from 'next/router';
 import { useAuth } from '../context/AuthContext';
 import Link from 'next/link';
+import Layout from '../components/Layout'; // Import Layout component
 
 interface SignedUpEvent {
   id: string; // Event ID
@@ -18,7 +19,42 @@ export default function MyEventsPage() {
   const { user, loading: authLoading } = useAuth();
   const [signedUpEvents, setSignedUpEvents] = useState<SignedUpEvent[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(true);
-  const router = useRouter(); // Import from 'next/router'
+  const router = useRouter();
+
+  const fetchMyEvents = async () => {
+    if (!user) return; // Guard clause
+    setLoadingEvents(true);
+    try {
+      const signupsRef = collection(db, 'event_signups');
+      const q = query(signupsRef, where('userId', '==', user.uid));
+      const signupSnapshot = await getDocs(q);
+
+      const eventsDataPromises = signupSnapshot.docs.map(async (signupDoc) => {
+        const signupData = signupDoc.data();
+        const eventRef = doc(db, 'events', signupData.eventId);
+        const eventSnap = await getDoc(eventRef);
+
+        if (eventSnap.exists()) {
+          const eventData = eventSnap.data();
+          return {
+            id: eventSnap.id,
+            title: eventData.title,
+            date: eventData.date?.toDate ? eventData.date.toDate().toISOString() : eventData.date,
+            location: eventData.location,
+            signedUpAt: signupData.signedUpAt?.toDate ? signupData.signedUpAt.toDate().toISOString() : signupData.signedUpAt,
+          };
+        }
+        return null;
+      });
+      
+      const eventsData = (await Promise.all(eventsDataPromises)).filter(event => event !== null) as SignedUpEvent[];
+      setSignedUpEvents(eventsData);
+    } catch (error) {
+      console.error("Error fetching signed up events:", error);
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
 
   useEffect(() => {
     if (authLoading) return; // Wait for auth state to resolve
@@ -26,68 +62,53 @@ export default function MyEventsPage() {
       router.push('/login'); // Redirect to login if not authenticated
       return;
     }
-
-    const fetchMyEvents = async () => {
-      setLoadingEvents(true);
-      try {
-        const signupsRef = collection(db, 'event_signups');
-        const q = query(signupsRef, where('userId', '==', user.uid));
-        const signupSnapshot = await getDocs(q);
-
-        const eventsData: SignedUpEvent[] = [];
-        for (const signupDoc of signupSnapshot.docs) {
-          const signupData = signupDoc.data();
-          const eventRef = doc(db, 'events', signupData.eventId);
-          const eventSnap = await getDoc(eventRef);
-
-          if (eventSnap.exists()) {
-            const eventData = eventSnap.data();
-            eventsData.push({
-              id: eventSnap.id,
-              title: eventData.title,
-              // Ensure date is a string. Convert if it's a Firestore Timestamp.
-              date: eventData.date.toDate ? eventData.date.toDate().toISOString() : eventData.date,
-              location: eventData.location,
-              signedUpAt: signupData.signedUpAt.toDate ? signupData.signedUpAt.toDate().toISOString() : signupData.signedUpAt,
-            });
-          }
-        }
-        setSignedUpEvents(eventsData);
-      } catch (error) {
-        console.error("Error fetching signed up events:", error);
-      } finally {
-        setLoadingEvents(false);
-      }
-    };
-
     fetchMyEvents();
   }, [user, authLoading, router]);
 
-  if (authLoading || loadingEvents) {
-    return <p>Loading your events...</p>;
-  }
+  // Handler for leaving an event
+  const handleLeaveEvent = async (eventId: string) => {
+    if (!user) return;
 
-  if (!user) {
-    // This case should ideally be handled by the redirect, but as a fallback:
-    return <p>Please <Link href="/login">login</Link> to see your events.</p>;
+    if (window.confirm("Are you sure you want to leave this event?")) {
+      try {
+        await removeSignup(eventId, user.uid);
+        alert("You have successfully left the event.");
+        // Refresh the list of events after leaving one
+        fetchMyEvents();
+      } catch (err) {
+        console.error(err);
+        alert("There was an error trying to leave the event. Please try again.");
+      }
+    }
+  };
+
+  if (authLoading || loadingEvents) {
+    return <div><p>Loading your events...</p></div>;
   }
 
   return (
-    <div style={{ padding: '20px' }}>
+    <div>
       <h1>My Signed-Up Events</h1>
       {signedUpEvents.length === 0 ? (
-        <p>You haven't signed up for any events yet. <Link href="/">Browse events</Link>.</p>
+        <p>You haven&apos;t signed up for any events yet. <Link href="/events">Browse events</Link>.</p>
       ) : (
-        <ul>
+        <div className="events-list">
           {signedUpEvents.map((event) => (
-            <li key={event.id} style={{ marginBottom: '15px', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
-              <h2>{event.title}</h2>
-              <p>Date: {new Date(event.date).toLocaleDateString()}</p>
-              <p>Location: {event.location}</p>
-              <p>Signed up on: {new Date(event.signedUpAt).toLocaleDateString()}</p>
-            </li>
+            <div key={event.id} className="sticky-note-card">
+              <h3>{event.title}</h3>
+              <p><strong>Date:</strong> {new Date(event.date).toLocaleDateString()}</p>
+              <p><strong>Location:</strong> {event.location}</p>
+              <p><em>Signed up on: {new Date(event.signedUpAt).toLocaleDateString()}</em></p>
+              <button
+                onClick={() => handleLeaveEvent(event.id)}
+                className="button-danger"
+                style={{ marginTop: '10px' }}
+              >
+                Leave Event
+              </button>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );
