@@ -3,6 +3,12 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth'; // Import getAuth
 import { collection, query, where, getDocs, deleteDoc, doc, writeBatch } from "firebase/firestore";
+import { 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  UserCredential 
+} from "firebase/auth";
+import { getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -69,6 +75,39 @@ export const deleteEventAndSignups = async (eventId: string): Promise<void> => {
 
   // 5. Commit the batch
   await batch.commit();
+};
+/**
+ * Handles the Google Sign-In process and creates a user profile if it's a new user.
+ * @returns The user credential upon successful sign-in.
+ */
+export const signInWithGoogle = async (): Promise<UserCredential> => {
+  const provider = new GoogleAuthProvider();
+  
+  try {
+    const result = await signInWithPopup(auth, provider);
+    const user = result.user;
+
+    // Check if a user document already exists in Firestore
+    const userDocRef = doc(db, "users", user.uid);
+    const userDocSnap = await getDoc(userDocRef);
+
+    // If the user document does not exist, create it
+    if (!userDocSnap.exists()) {
+      await setDoc(userDocRef, {
+        fullName: user.displayName,
+        email: user.email,
+        createdAt: serverTimestamp(),
+        uid: user.uid
+      });
+      console.log("New user profile created in Firestore for:", user.displayName);
+    }
+
+    return result;
+  } catch (error) {
+    // Handle specific errors, e.g., user closes popup
+    console.error("Error during Google sign-in:", error);
+    throw error;
+  }
 };
 
 export { db, auth }; // Export auth

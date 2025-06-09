@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, signInWithGoogle } from '../../lib/firebase'; // Import signInWithGoogle
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -18,52 +18,73 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.push('/'); // Redirect to homepage after successful login
-    } catch (err: unknown)  { // Changed from any to unknown
-        console.error("Detailed login error:", err); // Log the full error
-        if (err instanceof Error) {
-          setError(err.message);
-        } else if (typeof err === 'string') {
-          setError(err);
-        } else {
-          setError('An unexpected error occurred during login.');
-        }
+      router.push('/'); // Redirect to homepage
+    } catch (err: unknown) {
+      console.error("Detailed login error:", err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('An unexpected error occurred during login.');
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      await signInWithGoogle();
+      router.push('/'); // Redirect to home on successful login
+    } catch (err: any) {
+      setError("Failed to sign in with Google. Please try again.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: 'auto', padding: '20px' }}>
-      <h1>Login</h1>
+    <div className="form-container">
+      <h2>Login</h2>
       <form onSubmit={handleLogin}>
-        <div>
-          <label htmlFor="email">Email:</label>
+        {error && <p className="error-message">{error}</p>}
+        <div className="form-group">
+          <label htmlFor="email">Email</label>
           <input
             type="email"
             id="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            style={{ width: '100%', padding: '8px', marginBottom: '10px' }}
+            disabled={loading}
           />
         </div>
-        <div>
-          <label htmlFor="password">Password:</label>
+        <div className="form-group">
+          <label htmlFor="password">Password</label>
           <input
             type="password"
             id="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            style={{ width: '100%', padding: '8px', marginBottom: '10px' }}
+            disabled={loading}
           />
         </div>
-        {error && <p style={{ color: 'red' }}>{error}</p>}
-        <button type="submit" disabled={loading} style={{ padding: '10px 15px' }}>
+        <button type="submit" className="button" disabled={loading}>
           {loading ? 'Logging In...' : 'Login'}
         </button>
       </form>
-      <p>
-       Don&apos;t have an account? <Link href="/signup">Sign up here</Link>
+      
+      <div className="divider">OR</div>
+
+      <button onClick={handleGoogleSignIn} className="button-google" disabled={loading}>
+        Sign In with Google
+      </button>
+
+      <p className="auth-switch">
+        Don&apos;t have an account? <Link href="/signup">Sign Up</Link>
       </p>
     </div>
   );
