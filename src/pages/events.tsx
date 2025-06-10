@@ -1,74 +1,41 @@
-// src/pages/index.tsx
-import { useEffect, useState } from "react";
+// src/pages/events.tsx (Modified)
+import { useEffect, useState } from 'react';
+import { collection, query, where, getDocs, doc, addDoc, serverTimestamp, getCountFromServer } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
+import { useAuth } from '../context/AuthContext';
+import Layout from '../components/Layout';
 import Link from 'next/link';
-import { db } from "@/lib/firebase"; // Your existing import
-import { useAuth } from '../context/AuthContext'; // Assuming AuthContext.tsx is in src/context
-import {
-  collection,
-  getDocs,
-  addDoc,
-  serverTimestamp,
-  query,
-  where, // Import Timestamp if you're using it directly
-  getCountFromServer
-} from "firebase/firestore";
+import { useRouter } from 'next/router';
 
-// Define an interface for your event data
+// Updated interface to include all necessary fields
 export interface Event {
   id: string;
   title: string;
-  date: any; // Or string (ISO), number (ms), or Timestamp for more type safety
+  date: any;
   location: string;
-  description: string;     // New
-  maxParticipants: number; // New
-  creatorId: string;       // New
-  creatorEmail?: string;   // Optional: store creator's email for display
-  // any other fields
+  description: string;
+  maxParticipants: number;
+  creatorId: string;
+  creatorEmail?: string;
+  groupId: string; // Crucial for linking event to a group
+  groupName?: string; // Optional, for display purposes
   currentSignups?: number;
 }
 
-export default function Home() {
+const EventsPage = () => {
+  const { user, loading: authLoading } = useAuth();
   const [events, setEvents] = useState<Event[]>([]);
-  const { user, loading: authLoading } = useAuth(); // Use authLoading to avoid conflict
-  
+  const [loading, setLoading] = useState(true);
 
+  // State for signup functionality
   const [signupMessage, setSignupMessage] = useState<{ [key: string]: string }>({});
   const [signupLoading, setSignupLoading] = useState<{ [key: string]: boolean }>({});
   const [userSignedUpEvents, setUserSignedUpEvents] = useState<string[]>([]);
+  const router = useRouter();
 
-  // Fetch events (your existing logic)
-  useEffect(() => {
-    const fetchEventsAndCounts = async () => {
-      try {
-        const snapshot = await getDocs(collection(db, "events"));
-        const eventsListPromises = snapshot.docs.map(async (doc) => {
-          const data = doc.data();
-          const currentSignups = await fetchSignupCount(doc.id); // Fetch count for each event
-          return {
-            id: doc.id,
-            title: data.title,
-            date: data.date?.toDate ? data.date.toDate().toISOString() : data.date,
-            location: data.location,
-            description: data.description || 'No description available.', // Provide default
-            maxParticipants: data.maxParticipants || 0, // Provide default
-            creatorId: data.creatorId,
-            creatorEmail: data.creatorEmail,
-            currentSignups: currentSignups, // Add current signups
-          } as Event;
-        });        
-        const eventsList = await Promise.all(eventsListPromises);
-        setEvents(eventsList);
-      } catch (error: unknown) {
-        console.error("Error fetching created events:", error);
-        // Optionally set an error state to display to the user
-      }
-    };
+  // --- Data Fetching Logic ---
 
-    fetchEventsAndCounts();
-  }, []); // Re-fetch if needed based on other dependencies, or implement a refresh mechanism
-
-
-  //Function to fetch current signup count for a single event
+  // Function to fetch current signup count for a single event
   const fetchSignupCount = async (eventId: string): Promise<number> => {
     try {
       const signupsQuery = query(collection(db, 'event_signups'), where('eventId', '==', eventId));
@@ -76,9 +43,10 @@ export default function Home() {
       return snapshot.data().count;
     } catch (error) {
       console.error(`Error fetching signup count for event ${eventId}:`, error);
-      return 0; // Default to 0 on error
+      return 0;
     }
   };
+
   // Function to check which events the current user has signed up for
   const fetchUserSignups = async (userId: string) => {
     if (!userId) return;
@@ -93,141 +61,137 @@ export default function Home() {
     }
   };
 
-  // Fetch user signups when user is loaded or changes
   useEffect(() => {
     if (user && !authLoading) {
       fetchUserSignups(user.uid);
     } else if (!user && !authLoading) {
-      setUserSignedUpEvents([]); // Clear if user logs out or is not loaded
+      setUserSignedUpEvents([]);
     }
   }, [user, authLoading]);
 
 
+  // Main effect to fetch all visible events
+  useEffect(() => {
+    const fetchVisibleEvents = async () => {
+      setLoading(true);
+      try {
+        let visibleGroupIds: string[] = [];
+
+        // 1. Get all public group IDs
+        const publicGroupsQuery = query(collection(db, 'groups'), where('privacy', '==', 'public'));
+        const publicGroupsSnap = await getDocs(publicGroupsQuery);
+        visibleGroupIds = publicGroupsSnap.docs.map(doc => doc.id);
+
+        // 2. If user is logged in, get IDs of groups they are a member of
+        if (user) {
+          const memberGroupsQuery = query(collection(db, 'group_members'), where('userId', '==', user.uid));
+          const memberGroupsSnap = await getDocs(memberGroupsQuery);
+          const memberGroupIds = memberGroupsSnap.docs.map(doc => doc.data().groupId);
+          visibleGroupIds = [...new Set([...visibleGroupIds, ...memberGroupIds])];
+        }
+
+        if (visibleGroupIds.length === 0) {
+            setEvents([]);
+            setLoading(false);
+            return;
+        }
+        
+        // 3. Fetch all events from those groups
+        const eventsQuery = query(collection(db, 'events'), where('groupId', 'in', visibleGroupIds));
+        const eventsSnap = await getDocs(eventsQuery);
+        let eventsData = eventsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Event[];
+        
+        // 4. Fetch group names for context
+        const groupIds = [...new Set(eventsData.map(e => e.groupId))];
+        const groupsQuery = query(collection(db, 'groups'), where('__name__', 'in', groupIds));
+        const groupsSnap = await getDocs(groupsQuery);
+        const groupNameMap = new Map<string, string>();
+        groupsSnap.forEach(doc => groupNameMap.set(doc.id, doc.data().name));
+
+        // 5. Fetch signup counts and add group names
+        const eventsWithDetails = await Promise.all(eventsData.map(async (event) => {
+            const currentSignups = await fetchSignupCount(event.id);
+            return {
+                ...event,
+                groupName: groupNameMap.get(event.groupId) || 'Unknown Group',
+                currentSignups: currentSignups,
+            };
+        }));
+        
+        setEvents(eventsWithDetails);
+
+      } catch (error) {
+        console.error("Error fetching events:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchVisibleEvents();
+  }, [user]);
+
+  // --- Event Handling ---
+
   const handleEventSignup = async (event: Event) => {
-    // Ensure 'user' is available from useAuth() in your component's scope
-    // Ensure 'setSignupMessage', 'setSignupLoading', 'userSignedUpEvents', 'fetchUserSignups', 'setEvents'
-    // are available from useState/props in your component's scope.
-  
     if (!user) {
-      setSignupMessage(prev => ({ ...prev, [event.id]: 'Please login to sign up.' }));
-      // Optionally, you could redirect to login here: router.push('/login');
+      router.push('/login');
       return;
     }
   
     setSignupLoading(prev => ({ ...prev, [event.id]: true }));
-    setSignupMessage(prev => ({ ...prev, [event.id]: '' })); // Clear previous message
+    setSignupMessage(prev => ({ ...prev, [event.id]: '' }));
   
     try {
-      // 1. Check if user is already signed up (client-side check for quick feedback)
-      if (userSignedUpEvents.includes(event.id)) {
-        setSignupMessage(prev => ({ ...prev, [event.id]: 'You are already signed up for this event.' }));
-        setSignupLoading(prev => ({ ...prev, [event.id]: false }));
-        return;
-      }
-  
-      // 2. Fetch the most current number of signups for THIS event
       const currentSignups = await fetchSignupCount(event.id);
   
-      // 3. Check if the event is full
-      if (event.maxParticipants > 0 && currentSignups >= event.maxParticipants) { // Check maxParticipants > 0 to avoid issues with unconfigured events
+      if (event.maxParticipants > 0 && currentSignups >= event.maxParticipants) {
         setSignupMessage(prev => ({ ...prev, [event.id]: 'Sorry, this event is already full.' }));
-        // Optionally update the event in local state to reflect it's full if not already done
-        setEvents(prevEvents => prevEvents.map(e => e.id === event.id ? {...e, currentSignups} : e));
-        setSignupLoading(prev => ({ ...prev, [event.id]: false }));
         return;
       }
   
-      // 4. Proceed with signup
-      const signupsCollectionRef = collection(db, 'event_signups');
-      if (!user.uid) { // Should not happen if user is logged in, but good check
-          throw new Error("User ID is not available.");
-      }
-  
-      await addDoc(signupsCollectionRef, {
+      await addDoc(collection(db, 'event_signups'), {
         eventId: event.id,
         userId: user.uid,
-        userName: user.fullName || user.displayName || 'Anonymous Volunteer', // Use name from AuthContext
+        userName: user.fullName || 'Anonymous Volunteer',
         userEmail: user.email,
-        eventName: event.title, // Denormalizing for easier display in signup lists
+        eventName: event.title,
         signedUpAt: serverTimestamp(),
       });
   
-      // 5. Success! Update UI.
       setSignupMessage(prev => ({ ...prev, [event.id]: 'Successfully signed up!' }));
-      
-      // Refresh the list of events the user is signed up for
-      await fetchUserSignups(user.uid); 
-      
-      // Update the currentSignups count for this event in the local 'events' state
-      setEvents(prevEvents => prevEvents.map(e => {
-        if (e.id === event.id) {
-          // If currentSignups was undefined, initialize from fetched, else increment
-          const newCount = (e.currentSignups !== undefined ? e.currentSignups : currentSignups) + 1;
-          return { ...e, currentSignups: newCount };
-        }
-        return e;
-      }));
+      await fetchUserSignups(user.uid);
+      setEvents(prevEvents => prevEvents.map(e => e.id === event.id ? { ...e, currentSignups: (e.currentSignups || 0) + 1 } : e));
   
-    } catch (error: unknown) { // Change from any
+    } catch (error) {
         console.error("Error signing up for event:", error);
-        // Update your setSignupMessage logic to handle 'unknown'
-        if (error instanceof Error) {
-          setSignupMessage(prev => ({ ...prev, [event.id]: `Failed to sign up: ${error.message}` }));
-        } else {
-          setSignupMessage(prev => ({ ...prev, [event.id]: `Failed to sign up: An unknown error occurred.` }));
-        }
-      } finally {
+        setSignupMessage(prev => ({ ...prev, [event.id]: `Failed to sign up.` }));
+    } finally {
       setSignupLoading(prev => ({ ...prev, [event.id]: false }));
     }
   };
 
-  // Helper function to format date
-  const formatDate = (dateInput: any): string => {
-    if (!dateInput) return 'N/A';
-    // If it's a Firestore Timestamp object, call toDate()
-    if (dateInput && typeof dateInput.toDate === 'function') {
-      return dateInput.toDate().toLocaleDateString();
-    }
-    // If it's an ISO string or number (milliseconds)
-    try {
-      return new Date(dateInput).toLocaleDateString();
-    } catch (_e) {
-      return String(dateInput); // Fallback to string representation
-    }
-  };
-
-
-  if (authLoading) {
-    return <p>Loading application...</p>; // Or a spinner component
-  }
-
   return (
-    <div style={{ padding: '20px' }}>
-    
+    <div>
+      <h1>Upcoming Events</h1>
+      {loading && <p>Loading events...</p>}
+      {!loading && events.length === 0 && <p>No events to show. Try joining some groups!</p>}
       
-
-
-      {events.length === 0 && !authLoading && <p>No events scheduled at the moment. Please check back later!</p>}
-      {authLoading && <p>Loading events...</p>}
-
-
-      <ul style={{ listStyle: 'none', padding: 0 }}>
+      <div className="events-list">
         {events.map((event) => {
           const isFull = (event.currentSignups || 0) >= event.maxParticipants;
           const alreadySignedUp = userSignedUpEvents.includes(event.id);
 
           return (
-            <li key={event.id} style={{ border: '1px solid #ddd', padding: '15px', marginBottom: '15px', borderRadius: '5px' }}>
-              <h2>{event.title}</h2>
-              <p><strong>Date:</strong> {formatDate(event.date)}</p>
+            <div key={event.id} className="sticky-note-card">
+              <p style={{ fontWeight: 'bold', color: '#c79100' }}>From Group: <Link href={`/groups/${event.groupId}`}>{event.groupName}</Link></p>
+              <h3>{event.title}</h3>
+              <p><strong>Date:</strong> {new Date(event.date.toDate()).toLocaleString()}</p>
               <p><strong>Location:</strong> {event.location}</p>
-              <p><strong>Description:</strong> {event.description}</p>
+              <p>{event.description}</p>
               <p>
-                <strong>Slots:</strong> {event.currentSignups === undefined ? 'Loading...' : `${event.currentSignups} / ${event.maxParticipants}`}
+                <strong>Slots:</strong> {event.currentSignups} / {event.maxParticipants}
                 {isFull && !alreadySignedUp && <span style={{ color: 'orange', marginLeft: '10px' }}>(Full)</span>}
               </p>
-              {event.creatorEmail && <p><small><i>Created by: {event.creatorEmail}</i></small></p>}
-
 
               {user && (
                 <div style={{ marginTop: '10px' }}>
@@ -239,16 +203,16 @@ export default function Home() {
                     <button
                       onClick={() => handleEventSignup(event)}
                       disabled={signupLoading[event.id]}
-                      style={{ padding: '8px 12px', cursor: 'pointer' }}
+                      className="button"
                     >
-                      {signupLoading[event.id] ? 'Signing Up...' : 'Sign Up for Event'}
+                      {signupLoading[event.id] ? 'Signing Up...' : 'Sign Up'}
                     </button>
                   )}
                 </div>
               )}
               {!user && (
                 <p style={{ marginTop: '10px' }}>
-                  Please <Link href="/login" style={{ color: 'blue', textDecoration: 'underline' }}>login</Link> to sign up for this event.
+                  Please <Link href="/login">login</Link> to sign up.
                 </p>
               )}
               {signupMessage[event.id] && (
@@ -256,10 +220,12 @@ export default function Home() {
                   {signupMessage[event.id]}
                 </p>
               )}
-            </li>
+            </div>
           );
         })}
-      </ul>
+      </div>
     </div>
   );
-}
+};
+
+export default EventsPage;

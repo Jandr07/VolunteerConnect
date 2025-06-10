@@ -8,7 +8,7 @@ import {
   signInWithPopup, 
   UserCredential 
 } from "firebase/auth";
-import { getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { getDoc, setDoc, serverTimestamp,limit } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -109,5 +109,109 @@ export const signInWithGoogle = async (): Promise<UserCredential> => {
     throw error;
   }
 };
+
+/**
+ * Allows a user to join a public group or request to join a private group.
+ * @param groupId The ID of the group.
+ * @param groupPrivacy The privacy setting of the group ('public' or 'private').
+ * @param user The authenticated user object from useAuth.
+ */
+export const requestToJoinGroup = async (groupId: string, groupPrivacy: 'public' | 'private', user: any) => {
+  if (!user) throw new Error("User not authenticated");
+
+  if (groupPrivacy === 'public') {
+    // For public groups, add the user directly to members with 'member' role.
+    const memberDocRef = doc(db, 'group_members', `${groupId}_${user.uid}`);
+    await setDoc(memberDocRef, {
+      groupId: groupId,
+      userId: user.uid,
+      userName: user.fullName || user.displayName,
+      userEmail: user.email,
+      role: 'member',
+      joinedAt: serverTimestamp(),
+    });
+  } else {
+    // For private groups, create a join request.
+    const requestDocRef = doc(db, 'join_requests', `${groupId}_${user.uid}`);
+    await setDoc(requestDocRef, {
+      groupId: groupId,
+      userId: user.uid,
+      userName: user.fullName || user.displayName,
+      requestedAt: serverTimestamp(),
+    });
+  }
+};
+
+/**
+ * Approves a join request for a private group.
+ * This function creates a member document and deletes the join request.
+ * @param groupId The group ID.
+ * @param targetUser An object containing the target user's id and name.
+ */
+export const approveJoinRequest = async (groupId: string, targetUser: { id: string; name: string }) => {
+  const memberDocRef = doc(db, 'group_members', `${groupId}_${targetUser.id}`);
+  await setDoc(memberDocRef, {
+    groupId: groupId,
+    userId: targetUser.id,
+    userName: targetUser.name,
+    role: 'member',
+    joinedAt: serverTimestamp(),
+  });
+
+  const requestDocRef = doc(db, 'join_requests', `${groupId}_${targetUser.id}`);
+  await deleteDoc(requestDocRef);
+};
+
+/**
+ * Denies a join request for a private group by deleting the request document.
+ * @param groupId The group ID.
+ * @param targetUserId The user ID of the request to deny.
+ */
+export const denyJoinRequest = async (groupId: string, targetUserId: string) => {
+  const requestDocRef = doc(db, 'join_requests', `${groupId}_${targetUserId}`);
+  await deleteDoc(requestDocRef);
+};
+
+/**
+ * Promotes a member to an admin role.
+ * @param groupId The group ID.
+ * @param targetUserId The user ID of the member to promote.
+ */
+export const promoteToAdmin = async (groupId: string, targetUserId: string) => {
+    const memberDocRef = doc(db, 'group_members', `${groupId}_${targetUserId}`);
+    await setDoc(memberDocRef, { role: 'admin' }, { merge: true });
+};
+
+/**
+ * Removes a member from a group.
+ * @param groupId The group ID.
+ * @param targetUserId The user ID of the member to kick.
+ */
+export const kickMember = async (groupId: string, targetUserId: string) => {
+    const memberDocRef = doc(db, 'group_members', `${groupId}_${targetUserId}`);
+    await deleteDoc(memberDocRef);
+};
+
+/**
+ * Searches for groups by name.
+ * This performs a "starts with" search, case-sensitive.
+ * @param name The search term for the group name.
+ * @returns An array of found groups.
+ */
+export const searchGroups = async (name: string) => {
+  const groupsRef = collection(db, 'groups');
+  // Firestore query to find documents where the 'name' field starts with the search term
+  // '\uf8ff' is a very high code point in Unicode, so this acts like a "prefix" search
+  const q = query(
+    groupsRef, 
+    where('name', '>=', name), 
+    where('name', '<=', name + '\uf8ff'),
+    limit(20) // Limit results to avoid fetching too much data
+  );
+
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[]; // Adjust type as needed
+};
+
 
 export { db, auth }; // Export auth

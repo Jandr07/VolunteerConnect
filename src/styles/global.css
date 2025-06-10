@@ -236,3 +236,88 @@
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
+/* Add to src/styles/globals.css */
+.sticky-note-card.interactive {
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.sticky-note-card.interactive:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+}
+
+.privacy-tag {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  font-weight: bold;
+  text-transform: capitalize;
+  margin-top: 10px;
+}
+
+.privacy-tag.public {
+  background-color: #e8f5e9; /* Light green */
+  color: #2e7d32;
+}
+
+.privacy-tag.private {
+  background-color: #ffebee; /* Light red */
+  color: #c62828;
+}
+
+.group-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+/* Add to src/styles/globals.css */
+.button-success {
+  padding: 6px 12px;
+  border: 1px solid #2e7d32;
+  background-color: #4caf50;
+  color: white;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: 'Kalam', cursive;
+  font-weight: bold;
+}
+.button-success:hover {
+  background-color: #388e3c;
+}
+.button-secondary {
+  padding: 6px 12px;
+  border: 1px solid #78909c;
+  background-color: #b0bec5;
+  color: #263238;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: 'Kalam', cursive;
+  font-weight: bold;
+}
+.button-secondary:hover {
+  background-color: #90a4ae;
+}
+
+/* Add to src/styles/globals.css */
+.nav-search-form {
+  display: flex;
+  align-items: center;
+}
+
+.nav-search-input {
+  padding: 8px 12px;
+  border-radius: 20px; /* Pill shape */
+  border: 1px solid #ddd;
+  font-family: 'Kalam', cursive;
+  font-size: 0.95em;
+  min-width: 200px;
+  transition: all 0.2s ease-in-out;
+}
+
+.nav-search-input:focus {
+  outline: none;
+  border-color: #fbc02d;
+  box-shadow: 0 0 0 2px rgba(251, 192, 45, 0.4);
+}
