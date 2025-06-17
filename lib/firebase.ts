@@ -1,14 +1,26 @@
 // src/lib/firebase.ts
+
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth'; // Import getAuth
-import { collection, query, where, getDocs, deleteDoc, doc, writeBatch } from "firebase/firestore";
 import { 
+  getFirestore, 
+  collection, 
+  query, 
+  where, 
+  getDocs, 
+  deleteDoc, 
+  doc, 
+  writeBatch, 
+  getDoc, 
+  setDoc, 
+  serverTimestamp, 
+  limit 
+} from 'firebase/firestore';
+import { 
+  getAuth, 
   GoogleAuthProvider, 
   signInWithPopup, 
   UserCredential 
 } from "firebase/auth";
-import { getDoc, setDoc, serverTimestamp,limit } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -22,8 +34,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const db = getFirestore(app);
-const auth = getAuth(app); // Initialize Firebase Auth and get a reference to the service
-
+const auth = getAuth(app);
 
 /**
  * Removes a user's signup for a specific event.
@@ -32,16 +43,13 @@ const auth = getAuth(app); // Initialize Firebase Auth and get a reference to th
  */
 export const removeSignup = async (eventId: string, userId: string): Promise<void> => {
   const signupsCollectionRef = collection(db, 'event_signups');
-  // Create a query to find the specific signup document
   const q = query(signupsCollectionRef, where('eventId', '==', eventId), where('userId', '==', userId));
-
   const querySnapshot = await getDocs(q);
 
   if (querySnapshot.empty) {
     throw new Error("Signup not found. Could not remove.");
   }
 
-  // There should only be one, but we'll loop just in case
   const batch = writeBatch(db);
   querySnapshot.forEach((doc) => {
     batch.delete(doc.ref);
@@ -56,26 +64,18 @@ export const removeSignup = async (eventId: string, userId: string): Promise<voi
  */
 export const deleteEventAndSignups = async (eventId: string): Promise<void> => {
   const batch = writeBatch(db);
-
-  // 1. Reference to the event document
   const eventRef = doc(db, 'events', eventId);
-
-  // 2. Query for all signups for this event
   const signupsCollectionRef = collection(db, 'event_signups');
   const q = query(signupsCollectionRef, where('eventId', '==', eventId));
   const signupsSnapshot = await getDocs(q);
 
-  // 3. Add all signup docs to the batch for deletion
   signupsSnapshot.forEach((doc) => {
     batch.delete(doc.ref);
   });
-
-  // 4. Add the event doc itself to the batch for deletion
   batch.delete(eventRef);
-
-  // 5. Commit the batch
   await batch.commit();
 };
+
 /**
  * Handles the Google Sign-In process and creates a user profile if it's a new user.
  * @returns The user credential upon successful sign-in.
@@ -86,12 +86,9 @@ export const signInWithGoogle = async (): Promise<UserCredential> => {
   try {
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
-
-    // Check if a user document already exists in Firestore
     const userDocRef = doc(db, "users", user.uid);
     const userDocSnap = await getDoc(userDocRef);
 
-    // If the user document does not exist, create it
     if (!userDocSnap.exists()) {
       await setDoc(userDocRef, {
         fullName: user.displayName,
@@ -101,31 +98,45 @@ export const signInWithGoogle = async (): Promise<UserCredential> => {
       });
       console.log("New user profile created in Firestore for:", user.displayName);
     }
-
     return result;
   } catch (error) {
-    // Handle specific errors, e.g., user closes popup
     console.error("Error during Google sign-in:", error);
     throw error;
   }
 };
 
 /**
- * Allows a user to join a public group or request to join a private group.
+ * FIXED: Allows a user to join a public group or request to join a private group.
+ * This version is more robust because it fetches the user's profile directly
+ * to ensure the correct user name is used.
  * @param groupId The ID of the group.
  * @param groupPrivacy The privacy setting of the group ('public' or 'private').
- * @param user The authenticated user object from useAuth.
+ * @param user The authenticated user object from useAuth (must contain uid).
  */
-export const requestToJoinGroup = async (groupId: string, groupPrivacy: 'public' | 'private', user: any) => {
-  if (!user) throw new Error("User not authenticated");
+export const requestToJoinGroup = async (groupId: string, groupPrivacy: 'public' | 'private', user: { uid: string; displayName: string | null; email: string | null; }) => {
+  if (!user || !user.uid) throw new Error("User not authenticated or UID missing");
 
+  // Fetch the user's profile from Firestore to get the correct name.
+  const userDocRef = doc(db, "users", user.uid);
+  const userDocSnap = await getDoc(userDocRef);
+
+  // Determine the user's name robustly.
+  // Priority: Firestore 'fullName' > Auth 'displayName' > Fallback.
+  let userName = "A New User"; // A sensible fallback
+  if (userDocSnap.exists() && userDocSnap.data().fullName) {
+    userName = userDocSnap.data().fullName;
+  } else if (user.displayName) {
+    userName = user.displayName;
+  }
+
+  // Proceed with the original logic using the reliably-fetched userName.
   if (groupPrivacy === 'public') {
     // For public groups, add the user directly to members with 'member' role.
     const memberDocRef = doc(db, 'group_members', `${groupId}_${user.uid}`);
     await setDoc(memberDocRef, {
       groupId: groupId,
       userId: user.uid,
-      userName: user.fullName || user.displayName,
+      userName: userName, // Use the robustly determined name
       userEmail: user.email,
       role: 'member',
       joinedAt: serverTimestamp(),
@@ -136,7 +147,7 @@ export const requestToJoinGroup = async (groupId: string, groupPrivacy: 'public'
     await setDoc(requestDocRef, {
       groupId: groupId,
       userId: user.uid,
-      userName: user.fullName || user.displayName,
+      userName: userName, // Use the robustly determined name
       requestedAt: serverTimestamp(),
     });
   }
@@ -144,7 +155,6 @@ export const requestToJoinGroup = async (groupId: string, groupPrivacy: 'public'
 
 /**
  * Approves a join request for a private group.
- * This function creates a member document and deletes the join request.
  * @param groupId The group ID.
  * @param targetUser An object containing the target user's id and name.
  */
@@ -163,7 +173,7 @@ export const approveJoinRequest = async (groupId: string, targetUser: { id: stri
 };
 
 /**
- * Denies a join request for a private group by deleting the request document.
+ * Denies a join request for a private group.
  * @param groupId The group ID.
  * @param targetUserId The user ID of the request to deny.
  */
@@ -194,24 +204,20 @@ export const kickMember = async (groupId: string, targetUserId: string) => {
 
 /**
  * Searches for groups by name.
- * This performs a "starts with" search, case-sensitive.
  * @param name The search term for the group name.
  * @returns An array of found groups.
  */
 export const searchGroups = async (name: string) => {
   const groupsRef = collection(db, 'groups');
-  // Firestore query to find documents where the 'name' field starts with the search term
-  // '\uf8ff' is a very high code point in Unicode, so this acts like a "prefix" search
   const q = query(
     groupsRef, 
     where('name', '>=', name), 
     where('name', '<=', name + '\uf8ff'),
-    limit(20) // Limit results to avoid fetching too much data
+    limit(20)
   );
 
   const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[]; // Adjust type as needed
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
 };
 
-
-export { db, auth }; // Export auth
+export { db, auth };

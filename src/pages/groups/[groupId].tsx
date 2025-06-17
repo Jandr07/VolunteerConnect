@@ -1,13 +1,15 @@
-// src/pages/groups/[groupId].tsx (Updated)
+// src/pages/groups/[groupId].tsx (Updated with explicit types and Link fix)
+
 import { useRouter } from 'next/router';
 import { useEffect, useState, useCallback } from 'react';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import Link from 'next/link';
+// Import necessary types from Firestore
+import { doc, getDoc, collection, query, where, getDocs, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { db, requestToJoinGroup } from '../../../lib/firebase';
 import { useAuth } from '../../context/AuthContext';
-import Layout from '../../components/Layout';
 import { Event } from '../events';
-import JoinRequests from '../../components/JoinRequests'; // Import new component
-import MemberManagement from '../../components/MemberManagement'; // Import new component
+import JoinRequests from '../../components/JoinRequests';
+import MemberManagement from '../../components/MemberManagement';
 
 // Define types
 interface Group {
@@ -26,6 +28,10 @@ interface JoinRequest {
   userId: string;
   userName: string;
 }
+interface Feedback {
+  type: 'success' | 'error';
+  message: string;
+}
 
 const GroupDetailPage = () => {
   const router = useRouter();
@@ -35,75 +41,90 @@ const GroupDetailPage = () => {
   const [group, setGroup] = useState<Group | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
-  const [requests, setRequests] = useState<JoinRequest[]>([]); // New state for requests
+  const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [userStatus, setUserStatus] = useState<'admin' | 'member' | 'pending' | 'non-member'>('non-member');
   const [loading, setLoading] = useState(true);
+  const [feedbackMessage, setFeedbackMessage] = useState<Feedback | null>(null);
 
-  // Use useCallback to memoize the data fetching function to prevent re-renders
   const fetchGroupData = useCallback(async () => {
     if (!groupId || typeof groupId !== 'string') return;
     setLoading(true);
 
     try {
-      // Fetch group details
       const groupRef = doc(db, 'groups', groupId);
       const groupSnap = await getDoc(groupRef);
-      if (!groupSnap.exists()) { setGroup(null); return; }
+      if (!groupSnap.exists()) {
+        setGroup(null);
+        setLoading(false);
+        return;
+      }
       const groupData = { id: groupSnap.id, ...groupSnap.data() } as Group;
       setGroup(groupData);
 
-      // Fetch members and determine user role
       const membersQuery = query(collection(db, 'group_members'), where('groupId', '==', groupId));
       const membersSnap = await getDocs(membersQuery);
-      const membersData = membersSnap.docs.map(d => d.data() as Member);
+      const membersData = membersSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => d.data() as Member);
       setMembers(membersData);
 
-      // Fetch events
-      const eventsQuery = query(collection(db, 'events'), where('groupId', '==', groupId));
-      const eventsSnap = await getDocs(eventsQuery);
-      const eventsData = eventsSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Event[];
-      setEvents(eventsData);
+      let canViewContent = groupData.privacy === 'public';
+      let isAdmin = false;
 
-      // Determine current user's status
       if (user) {
         const currentUserMembership = membersData.find(m => m.userId === user.uid);
         if (currentUserMembership) {
+          canViewContent = true;
+          isAdmin = currentUserMembership.role === 'admin';
           setUserStatus(currentUserMembership.role);
         } else {
-            // Check for pending join request
-            const requestRef = doc(db, 'join_requests', `${groupId}_${user.uid}`);
-            const requestSnap = await getDoc(requestRef);
-            setUserStatus(requestSnap.exists() ? 'pending' : 'non-member');
-        }
-
-        // If user is an admin, fetch join requests
-        if (currentUserMembership?.role === 'admin') {
-          const requestsQuery = query(collection(db, 'join_requests'), where('groupId', '==', groupId));
-          const requestsSnap = await getDocs(requestsQuery);
-          const requestsData = requestsSnap.docs.map(r => ({ userId: r.data().userId, userName: r.data().userName })) as JoinRequest[];
-          setRequests(requestsData);
+          const requestRef = doc(db, 'join_requests', `${groupId}_${user.uid}`);
+          const requestSnap = await getDoc(requestRef);
+          setUserStatus(requestSnap.exists() ? 'pending' : 'non-member');
         }
       }
+
+      if (canViewContent) {
+        const eventsQuery = query(collection(db, 'events'), where('groupId', '==', groupId));
+        const eventsSnap = await getDocs(eventsQuery);
+        const eventsData = eventsSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({ id: d.id, ...d.data() }) as Event);
+        setEvents(eventsData);
+      } else {
+        setEvents([]);
+      }
+      
+      if (isAdmin) {
+        const requestsQuery = query(collection(db, 'join_requests'), where('groupId', '==', groupId));
+        const requestsSnap = await getDocs(requestsQuery);
+        const requestsData = requestsSnap.docs.map((r: QueryDocumentSnapshot<DocumentData>) => r.data() as JoinRequest);
+        setRequests(requestsData);
+      }
+
     } catch (error) {
       console.error("Error fetching group data:", error);
+      setFeedbackMessage({ type: 'error', message: "Could not load group data."});
     } finally {
       setLoading(false);
     }
   }, [groupId, user]);
 
   useEffect(() => {
-    fetchGroupData();
-  }, [fetchGroupData]);
+    if (groupId) {
+      fetchGroupData();
+    }
+  }, [groupId, fetchGroupData]);
 
   const handleJoinGroup = async () => {
     if (!user || !group) return;
+    setFeedbackMessage(null);
     try {
       await requestToJoinGroup(group.id, group.privacy, user);
-      alert(group.privacy === 'public' ? "You have joined the group!" : "Your request to join has been sent.");
-      fetchGroupData(); // Refresh data to show new status
+      const successMsg = group.privacy === 'public' 
+        ? "You have successfully joined the group!" 
+        : "Your request to join has been sent for approval.";
+      setFeedbackMessage({ type: 'success', message: successMsg });
+      fetchGroupData();
     } catch (error) {
-      console.error(error);
-      alert("Failed to send request.");
+      console.error("FirebaseError:", error);
+      setFeedbackMessage({ type: 'error', message: "Failed to send request." });
     }
   };
   
@@ -116,18 +137,26 @@ const GroupDetailPage = () => {
 
   return (
     <div>
-      <div className="group-header">
+       <div className="group-header">
         <h1>{group.name}</h1>
         <p>{group.description}</p>
         <p><strong>Privacy:</strong> {group.privacy}</p>
       </div>
+
+      {feedbackMessage && (
+        <p style={{ color: feedbackMessage.type === 'error' ? 'red' : 'green', fontWeight: 'bold' }}>
+          {feedbackMessage.message}
+        </p>
+      )}
 
       {user && userStatus === 'non-member' && (
          <button onClick={handleJoinGroup} className="button">
             {group.privacy === 'public' ? 'Join Group' : 'Request to Join'}
          </button>
       )}
-      {user && userStatus === 'pending' && <p style={{color: 'orange', fontWeight: 'bold'}}>Your request to join is pending approval.</p>}
+      {user && userStatus === 'pending' && !feedbackMessage && (
+        <p style={{color: 'orange', fontWeight: 'bold'}}>Your request to join is pending approval.</p>
+      )}
       
       {userStatus === 'admin' && (
          <button onClick={handleCreateEvent} className="button-secondary" style={{marginBottom: '20px'}}>+ Create Event for this Group</button>
@@ -135,13 +164,12 @@ const GroupDetailPage = () => {
 
       <hr style={{margin: '30px 0'}} />
 
-      {/* Admin Section */}
-      {userStatus === 'admin' && (
-        <section className="admin-panel" style={{background: '#fafafa', padding: '20px', borderRadius: '8px', marginBottom: '20px'}}>
+      {userStatus === 'admin' && user && (
+        <section className="admin-panel">
           <h3>Admin Panel</h3>
           <JoinRequests requests={requests} groupId={group.id} onUpdateRequest={fetchGroupData} />
-          <hr style={{margin: '20px 0'}}/>
-          <MemberManagement members={members} groupId={group.id} currentUserId={user!.uid} onUpdateMembers={fetchGroupData} />
+          <hr/>
+          <MemberManagement members={members} groupId={group.id} currentUserId={user.uid} onUpdateMembers={fetchGroupData} />
         </section>
       )}
 
@@ -152,11 +180,15 @@ const GroupDetailPage = () => {
             events.length > 0 ? (
               <div className="events-list">
                 {events.map(event => (
-                  <div key={event.id} className="sticky-note-card">
-                    <h3>{event.title}</h3>
-                    {/* Ensure date is a valid object with toDate method before calling it */}
-                    <p>{event.date?.toDate ? new Date(event.date.toDate()).toLocaleString() : 'Date not available'}</p>
-                  </div>
+                  // ✅ FIX: Added legacyBehavior prop to the Link component
+                  <Link key={event.id} href={`/event-signups/${event.id}`} legacyBehavior>
+                    <a className="sticky-note-card-link">
+                      <div className="sticky-note-card">
+                        <h3>{event.title}</h3>
+                        <p>{event.date?.toDate ? new Date(event.date.toDate()).toLocaleString() : 'Date not available'}</p>
+                      </div>
+                    </a>
+                  </Link>
                 ))}
               </div>
             ) : <p>No events have been created for this group yet.</p>
