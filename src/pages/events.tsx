@@ -185,7 +185,7 @@ const EventsPage = () => {
     }
 
     if (!user) {
-        return <p>Please <Link href="/login"><a>login</a></Link> to see events from your groups.</p>;
+        return <p>Please <Link href="/login" legacyBehavior><a>login</a></Link> to see events from your groups.</p>;
     }
 
     if (events.length === 0) {

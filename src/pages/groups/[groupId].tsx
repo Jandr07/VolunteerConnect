@@ -1,10 +1,10 @@
-// src/pages/groups/[groupId].tsx (Updated with explicit types and Link fix)
+// src/pages/groups/[groupId].tsx (Updated to allow leaving groups)
 
 import { useRouter } from 'next/router';
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-// Import necessary types from Firestore
-import { doc, getDoc, collection, query, where, getDocs, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+// ✅ Import deleteDoc and writeBatch for the new leave functionality
+import { doc, getDoc, collection, query, where, getDocs, QueryDocumentSnapshot, DocumentData, deleteDoc, writeBatch, updateDoc } from 'firebase/firestore';
 import { db, requestToJoinGroup } from '../../../lib/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { Event } from '../events';
@@ -39,14 +39,16 @@ const GroupDetailPage = () => {
   const { user } = useAuth();
 
   const [group, setGroup] = useState<Group | null>(null);
-  const [events, setEvents] = useState<Event[]>([]);
+  const [events, setEvents] =useState<Event[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [userStatus, setUserStatus] = useState<'admin' | 'member' | 'pending' | 'non-member'>('non-member');
   const [loading, setLoading] = useState(true);
   const [feedbackMessage, setFeedbackMessage] = useState<Feedback | null>(null);
+  const [isLeaving, setIsLeaving] = useState(false); // For button loading state
 
   const fetchGroupData = useCallback(async () => {
+    // This function remains the same
     if (!groupId || typeof groupId !== 'string') return;
     setLoading(true);
 
@@ -63,7 +65,8 @@ const GroupDetailPage = () => {
 
       const membersQuery = query(collection(db, 'group_members'), where('groupId', '==', groupId));
       const membersSnap = await getDocs(membersQuery);
-      const membersData = membersSnap.docs.map((d: QueryDocumentSnapshot<DocumentData>) => d.data() as Member);
+      // We need the document ID for updates/deletes, so let's store it.
+      const membersData = membersSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Member & { id: string });
       setMembers(membersData);
 
       let canViewContent = groupData.privacy === 'public';
@@ -80,6 +83,8 @@ const GroupDetailPage = () => {
           const requestSnap = await getDoc(requestRef);
           setUserStatus(requestSnap.exists() ? 'pending' : 'non-member');
         }
+      } else {
+        setUserStatus('non-member');
       }
 
       if (canViewContent) {
@@ -113,6 +118,7 @@ const GroupDetailPage = () => {
   }, [groupId, fetchGroupData]);
 
   const handleJoinGroup = async () => {
+    // This function remains the same
     if (!user || !group) return;
     setFeedbackMessage(null);
     try {
@@ -128,6 +134,57 @@ const GroupDetailPage = () => {
     }
   };
   
+  // ✅ --- NEW FUNCTION: handleLeaveGroup ---
+  const handleLeaveGroup = async () => {
+    if (!user || !group || (userStatus !== 'member' && userStatus !== 'admin')) {
+      return;
+    }
+    
+    const confirmation = confirm("Are you sure you want to leave this group?");
+    if (!confirmation) return;
+
+    setIsLeaving(true);
+    setFeedbackMessage(null);
+
+    try {
+      const membershipId = `${group.id}_${user.uid}`;
+      const memberDocRef = doc(db, 'group_members', membershipId);
+
+      // Case 1: The user is an admin
+      if (userStatus === 'admin') {
+        const otherMembers = members.filter(m => m.userId !== user.uid);
+
+        // If there are other members, promote one to admin
+        if (otherMembers.length > 0) {
+          const newAdmin = otherMembers[0]; // Promote the first member
+          const newAdminDocRef = doc(db, 'group_members', `${group.id}_${newAdmin.userId}`);
+
+          // Use a batch write to ensure both actions succeed or fail together
+          const batch = writeBatch(db);
+          batch.delete(memberDocRef); // 1. Delete the old admin
+          batch.update(newAdminDocRef, { role: 'admin' }); // 2. Promote the new admin
+          await batch.commit();
+
+        } else {
+          // If the admin is the last member, just delete them
+          await deleteDoc(memberDocRef);
+        }
+      } 
+      // Case 2: The user is a regular member
+      else {
+        await deleteDoc(memberDocRef);
+      }
+
+      // On success, redirect the user away from the group
+      router.push('/groups?status=left');
+
+    } catch (error) {
+      console.error("Error leaving group:", error);
+      setFeedbackMessage({ type: 'error', message: "Failed to leave the group. Please try again."});
+      setIsLeaving(false);
+    }
+  };
+
   const handleCreateEvent = () => router.push(`/create-event?groupId=${groupId}`);
 
   if (loading) return <div><p>Loading group details...</p></div>;
@@ -149,21 +206,33 @@ const GroupDetailPage = () => {
         </p>
       )}
 
-      {user && userStatus === 'non-member' && (
-         <button onClick={handleJoinGroup} className="button">
-            {group.privacy === 'public' ? 'Join Group' : 'Request to Join'}
-         </button>
-      )}
+      {/* --- Button Controls --- */}
+      <div className="group-actions" style={{ display: 'flex', gap: '10px', margin: '20px 0' }}>
+        {user && userStatus === 'non-member' && (
+           <button onClick={handleJoinGroup} className="button">
+              {group.privacy === 'public' ? 'Join Group' : 'Request to Join'}
+           </button>
+        )}
+        
+        {userStatus === 'admin' && (
+           <button onClick={handleCreateEvent} className="button-secondary">+ Create Event</button>
+        )}
+        
+        {/* ✅ NEW "Leave Group" button */}
+        {(userStatus === 'member' || userStatus === 'admin') && (
+           <button onClick={handleLeaveGroup} disabled={isLeaving} className="button-danger">
+              {isLeaving ? 'Leaving...' : 'Leave Group'}
+           </button>
+        )}
+      </div>
+
       {user && userStatus === 'pending' && !feedbackMessage && (
         <p style={{color: 'orange', fontWeight: 'bold'}}>Your request to join is pending approval.</p>
       )}
       
-      {userStatus === 'admin' && (
-         <button onClick={handleCreateEvent} className="button-secondary" style={{marginBottom: '20px'}}>+ Create Event for this Group</button>
-      )}
-
       <hr style={{margin: '30px 0'}} />
 
+      {/* Admin Panel remains the same */}
       {userStatus === 'admin' && user && (
         <section className="admin-panel">
           <h3>Admin Panel</h3>
@@ -173,6 +242,7 @@ const GroupDetailPage = () => {
         </section>
       )}
 
+      {/* Group Content remains the same */}
       <div className="group-content">
         <section>
           <h2>Events</h2>
@@ -180,7 +250,6 @@ const GroupDetailPage = () => {
             events.length > 0 ? (
               <div className="events-list">
                 {events.map(event => (
-                  // ✅ FIX: Added legacyBehavior prop to the Link component
                   <Link key={event.id} href={`/event-signups/${event.id}`} legacyBehavior>
                     <a className="sticky-note-card-link">
                       <div className="sticky-note-card">
