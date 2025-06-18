@@ -1,17 +1,15 @@
-// src/pages/events.tsx (Regenerated to show events only from user's joined groups)
-
 import { useEffect, useState } from 'react';
 import { collection, query, where, getDocs, doc, setDoc, serverTimestamp, getCountFromServer } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../context/AuthContext';
-import Layout from '../components/Layout'; // Assuming you have this component
+import Layout from '../components/Layout';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 
 export interface Event {
   id: string;
   title: string;
-  date: any; // Keep as 'any' for Firestore Timestamps, but handle conversion
+  date: any; // Firestore Timestamp
   location: string;
   description: string;
   maxParticipants: number;
@@ -31,7 +29,6 @@ const EventsPage = () => {
   const [userSignedUpEvents, setUserSignedUpEvents] = useState<string[]>([]);
   const router = useRouter();
 
-  // --- Data Fetching Logic ---
   const fetchSignupCount = async (eventId: string): Promise<number> => {
     try {
       const signupsQuery = query(collection(db, 'event_signups'), where('eventId', '==', eventId));
@@ -57,12 +54,9 @@ const EventsPage = () => {
   };
 
   useEffect(() => {
-    // This effect runs when the user's authentication state changes.
-    // It's good for fetching data that is specific to the logged-in user but doesn't depend on other page data.
     if (user && !authLoading) {
       fetchUserSignups(user.uid);
     } else if (!user && !authLoading) {
-      // If the user logs out, clear their list of signed-up events.
       setUserSignedUpEvents([]);
     }
   }, [user, authLoading]);
@@ -71,7 +65,6 @@ const EventsPage = () => {
     const fetchEventsFromJoinedGroups = async () => {
       setLoading(true);
 
-      // If there's no user, there are no joined groups to show events from.
       if (!user) {
         setEvents([]);
         setLoading(false);
@@ -79,36 +72,27 @@ const EventsPage = () => {
       }
 
       try {
-        // --- MODIFICATION START ---
-        // 1. We ONLY fetch the groups the current user is a member of.
-        // The query for all public groups has been removed.
         const memberGroupsQuery = query(collection(db, 'group_members'), where('userId', '==', user.uid));
         const memberGroupsSnap = await getDocs(memberGroupsQuery);
         const joinedGroupIds = memberGroupsSnap.docs.map(doc => doc.data().groupId);
 
-        // If the user hasn't joined any groups, there's nothing to show.
         if (joinedGroupIds.length === 0) {
             setEvents([]);
             setLoading(false);
             return;
         }
 
-        // 2. The rest of the logic now uses `joinedGroupIds` instead of `visibleGroupIds`.
         const eventsQuery = query(collection(db, 'events'), where('groupId', 'in', joinedGroupIds));
-        // --- MODIFICATION END ---
-
         const eventsSnap = await getDocs(eventsQuery);
         let eventsData = eventsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Event[];
 
         const groupIds = [...new Set(eventsData.map(e => e.groupId))];
         if (groupIds.length > 0) {
-            // Fetch group details to display the group name for each event
             const groupsQuery = query(collection(db, 'groups'), where('__name__', 'in', groupIds));
             const groupsSnap = await getDocs(groupsQuery);
             const groupNameMap = new Map<string, string>();
             groupsSnap.forEach(doc => groupNameMap.set(doc.id, doc.data().name));
 
-            // Enhance each event with its signup count and group name
             const eventsWithDetails = await Promise.all(eventsData.map(async (event) => {
                 const currentSignups = await fetchSignupCount(event.id);
                 return {
@@ -117,7 +101,18 @@ const EventsPage = () => {
                     currentSignups: currentSignups,
                 };
             }));
-            setEvents(eventsWithDetails);
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const futureEvents = eventsWithDetails.filter(event => {
+                return event.date && typeof event.date.toDate === 'function' && event.date.toDate() >= today;
+            });
+
+            futureEvents.sort((a, b) => a.date.toDate().getTime() - b.date.toDate().getTime());
+
+            setEvents(futureEvents);
+            
         } else {
             setEvents([]);
         }
@@ -129,13 +124,11 @@ const EventsPage = () => {
       }
     };
 
-    // We only want to run this fetch logic when the user's auth state is settled.
     if (!authLoading) {
         fetchEventsFromJoinedGroups();
     }
-  }, [user, authLoading]); // Rerun this entire effect when the user or auth loading state changes.
+  }, [user, authLoading]);
 
-  // --- Event Handling ---
   const handleEventSignup = async (event: Event) => {
     if (!user) {
       router.push('/login');
@@ -165,7 +158,6 @@ const EventsPage = () => {
         signedUpAt: serverTimestamp(),
       });
 
-      // Optimistically update the UI
       setUserSignedUpEvents(prev => [...prev, event.id]);
       setEvents(prevEvents => prevEvents.map(e => e.id === event.id ? { ...e, currentSignups: (e.currentSignups || 0) + 1 } : e));
       setSignupMessage(prev => ({ ...prev, [event.id]: 'Successfully signed up!' }));
@@ -178,7 +170,6 @@ const EventsPage = () => {
     }
   };
 
-  // --- UI Rendering ---
   const renderContent = () => {
     if (loading || authLoading) {
         return <p>Loading events...</p>;
@@ -191,8 +182,8 @@ const EventsPage = () => {
     if (events.length === 0) {
         return (
             <div>
-                <p>No events to show.</p>
-                <p>Try joining some groups to see their upcoming events here!</p>
+                <p>No upcoming events found in your groups.</p>
+                <p>Try joining more groups or check back later!</p>
                 <Link href="/groups" passHref>
                     <button className="button">Browse Groups</button>
                 </Link>
@@ -214,7 +205,7 @@ const EventsPage = () => {
                 <a><h3>{event.title}</h3></a>
               </Link>
               
-              <p><strong>Date:</strong> {new Date(event.date.toDate()).toLocaleString()}</p>
+              <p><strong>Date:</strong> {event.date?.toDate ? new Date(event.date.toDate()).toLocaleString() : 'Date not set'}</p>
               <p><strong>Location:</strong> {event.location}</p>
               <p>{event.description}</p>
               <p>
@@ -222,7 +213,6 @@ const EventsPage = () => {
                 {isFull && !alreadySignedUp && <span style={{ color: 'orange', marginLeft: '10px' }}>(Full)</span>}
               </p>
 
-              {/* Signup UI remains the same */}
               {user && (
                 <div style={{ marginTop: '10px' }}>
                   {alreadySignedUp ? (
@@ -253,9 +243,8 @@ const EventsPage = () => {
   }
 
   return (
-    // Assuming you have a Layout component, otherwise wrap in a div
     <div>
-      <h1>Events From Your Groups</h1>
+      <h1>Upcoming Events From Your Groups</h1>
       {renderContent()}
     </div>
   );
