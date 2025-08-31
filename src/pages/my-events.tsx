@@ -1,7 +1,7 @@
 // src/pages/my-events.tsx (Updated to separate upcoming and past events)
 import { useEffect, useState } from 'react';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { db, removeSignup } from '@/lib/firebase'; // Import removeSignup
+import { db, removeSignup } from '../../lib/firebase'; // Import removeSignup
 import { useRouter } from 'next/router';
 import { useAuth } from '../context/AuthContext';
 import Link from 'next/link';
