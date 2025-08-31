@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { collection, query, where, getDocs, getCountFromServer } from 'firebase/firestore';
-import { db, deleteEventAndSignups } from '@/lib/firebase'; // Import delete function
+import { db, deleteEventAndSignups } from '../../lib/firebase'; // Import delete function
 import { useAuth } from '../context/AuthContext';
 import { Event } from '../pages/events'; // Adjust path if needed
 import Layout from '../components/Layout'; // Import Layout component
