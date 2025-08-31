@@ -2,7 +2,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { onAuthStateChanged, User as FirebaseUser, signOut as firebaseSignOut } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore'; // Import getDoc or onSnapshot
-import { auth, db } from '@/lib/firebase';
+import { auth, db } from '../../lib/firebase';
 
 // Define a more detailed User type for your context
 export interface AppUser extends FirebaseUser {

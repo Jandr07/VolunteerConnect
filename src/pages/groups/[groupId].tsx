@@ -1,7 +1,7 @@
-// src/pages/groups/[groupId].tsx (Regenerated and Finalized)
+// src/pages/groups/[groupId].tsx 
 
 import { useRouter } from 'next/router';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import {
@@ -57,6 +57,7 @@ const GroupDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [feedbackMessage, setFeedbackMessage] = useState<Feedback | null>(null);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [eventView, setEventView] = useState<'current' | 'past'>('current');
 
   const fetchGroupData = useCallback(async () => {
     if (!groupId || typeof groupId !== 'string') return;
@@ -126,10 +127,28 @@ const GroupDetailPage = () => {
     }
   }, [groupId, fetchGroupData]);
 
-  const handleLeaveGroup = async () => {
-    if (!user || !group || (userStatus !== 'member' && userStatus !== 'admin')) {
-      return;
+  const { currentEvents, pastEvents } = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const current: Event[] = [];
+    const past: Event[] = [];
+
+    for (const event of events) {
+      if (event.date?.toDate && event.date.toDate() >= today) {
+        current.push(event);
+      } else {
+        past.push(event);
+      }
     }
+
+    current.sort((a, b) => a.date.toDate().getTime() - b.date.toDate().getTime());
+    past.sort((a, b) => b.date.toDate().getTime() - a.date.toDate().getTime());
+
+    return { currentEvents: current, pastEvents: past };
+  }, [events]);
+
+  const handleLeaveGroup = async () => {
+    if (!user || !group || (userStatus !== 'member' && userStatus !== 'admin')) return;
     
     const confirmationMessage = members.length === 1
       ? "You are the last member. Leaving will permanently delete this group and all its events. Are you sure?"
@@ -143,10 +162,8 @@ const GroupDetailPage = () => {
     try {
       if (members.length === 1 && members[0].userId === user.uid) {
         const functions = getFunctions();
-        // ✅ UPDATED: The function name is now all lowercase to match the new v2 Cloud Function.
         const deleteGroup = httpsCallable(functions, 'deletegrouponlastleave');
         await deleteGroup({ groupId: group.id });
-        
         router.push('/groups?status=deleted');
         return;
       }
@@ -196,6 +213,43 @@ const GroupDetailPage = () => {
   };
   
   const handleCreateEvent = () => router.push(`/create-event?groupId=${groupId}`);
+  
+  const EventCard = ({ event }: { event: Event }) => (
+    <Link href={`/event-signups/${event.id}`} legacyBehavior>
+      <a className="sticky-note-card-link">
+        <div className="sticky-note-card">
+          <h3>{event.title}</h3>
+          <p>{event.date?.toDate ? new Date(event.date.toDate()).toLocaleString() : 'Date not available'}</p>
+        </div>
+      </a>
+    </Link>
+  );
+
+  // Style objects for the event view toggle buttons
+  const baseButtonStyle: React.CSSProperties = {
+    padding: '6px 16px',
+    fontSize: '14px',
+    border: '1px solid',
+    borderRadius: '20px',
+    cursor: 'pointer',
+    transition: 'background-color 0.2s, color 0.2s',
+    fontWeight: 500,
+    outline: 'none',
+  };
+
+  const activeButtonStyle: React.CSSProperties = {
+    ...baseButtonStyle,
+    backgroundColor: '#007bff',
+    color: '#fff',
+    borderColor: '#007bff',
+  };
+
+  const inactiveButtonStyle: React.CSSProperties = {
+    ...baseButtonStyle,
+    backgroundColor: '#f8f9fa',
+    color: '#495057',
+    borderColor: '#dee2e6',
+  };
 
   if (loading) return <div><p>Loading group details...</p></div>;
   if (!group) return <div><p>Sorry, this group could not be found.</p></div>;
@@ -253,20 +307,38 @@ const GroupDetailPage = () => {
         <section>
           <h2>Events</h2>
           {canViewContent ? (
-            events.length > 0 ? (
-              <div className="events-list">
-                {events.map(event => (
-                  <Link key={event.id} href={`/event-signups/${event.id}`} legacyBehavior>
-                    <a className="sticky-note-card-link">
-                      <div className="sticky-note-card">
-                        <h3>{event.title}</h3>
-                        <p>{event.date?.toDate ? new Date(event.date.toDate()).toLocaleString() : 'Date not available'}</p>
-                      </div>
-                    </a>
-                  </Link>
-                ))}
+            <>
+              <div className="event-view-toggle" style={{ marginBottom: '1rem', display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={() => setEventView('current')}
+                  style={eventView === 'current' ? activeButtonStyle : inactiveButtonStyle}
+                >
+                  Current ({currentEvents.length})
+                </button>
+                <button
+                  onClick={() => setEventView('past')}
+                  style={eventView === 'past' ? activeButtonStyle : inactiveButtonStyle}
+                >
+                  Past ({pastEvents.length})
+                </button>
               </div>
-            ) : <p>No events have been created for this group yet.</p>
+
+              {eventView === 'current' && (
+                currentEvents.length > 0 ? (
+                  <div className="events-list">
+                    {currentEvents.map(event => <EventCard key={event.id} event={event} />)}
+                  </div>
+                ) : <p>No current or upcoming events for this group.</p>
+              )}
+
+              {eventView === 'past' && (
+                pastEvents.length > 0 ? (
+                  <div className="events-list">
+                    {pastEvents.map(event => <EventCard key={event.id} event={event} />)}
+                  </div>
+                ) : <p>No past events found for this group.</p>
+              )}
+            </>
           ) : <p>This is a private group. Join to see their events.</p>}
         </section>
 
