@@ -8,20 +8,21 @@ export default function AboutPage() {
       <main style={{ maxWidth: '800px', margin: '0 auto' }}>
         <section style={{ marginBottom: '50px', padding: '25px', backgroundColor: '#fffde7', boxShadow: '3px 3px 8px rgba(0,0,0,0.1)', borderRadius: '5px' }}>
           <h2 style={{ fontSize: '2.8em', color: '#c79100', marginBottom: '20px', fontFamily: 'Patrick Hand, cursive' }}>
-            Welcome to VolunteerConnect!
+            Welcome to EasySignUpz!
           </h2>
           <p style={{ fontSize: '1.3em', lineHeight: '1.7', color: '#5d4037' }}>
-            Your central hub for discovering and participating in volunteer opportunities right here in Stowe, PA, and our surrounding community.
-            Whether you&apos;re looking to lend a hand, meet new people, or make a tangible difference, VolunteerConnect makes it simple and enjoyable.
+            Your central hub for organizing and participating in local events, volunteer opportunities, and group activities.
+            Whether you&apos;re looking to make a difference volunteering, coordinate a neighborhood potluck, or schedule shifts for a school function, EasySignupz makes bringing people together simple.
           </p>
         </section>
 
         <section style={{ marginBottom: '50px', padding: '25px', backgroundColor: '#fff9c4', boxShadow: '3px 3px 8px rgba(0,0,0,0.1)', borderRadius: '5px' }}>
           <h3 style={{ fontSize: '2em', color: '#c79100', marginBottom: '15px', fontFamily: 'Patrick Hand, cursive' }}>What We Do</h3>
           <p style={{ lineHeight: '1.7', color: '#5d4037', fontSize: '1.1em' }}>
-            We bridge the gap between passionate volunteers and the organizations or individuals hosting local events.
-            Browse a variety of upcoming activities, sign up with just a click, and easily manage your commitments—all in one convenient place.
-            Event creators can effortlessly post their needs and connect with a vibrant audience of willing helpers ready to contribute.
+            We bridge the gap between organizers and participants for any occasion. 
+            Our platform connects anyone—from non-profits and schools to local clubs and individuals—with an engaged community here in Pottstown.
+            Browse a variety of upcoming signups, reserve your spot with a click, and manage all your commitments in one convenient place.
+             Organizers can effortlessly post their needs—from volunteer slots and event RSVPs to potluck items—and connect with a vibrant community ready to participate and contribute.
           </p>
         </section>
 
@@ -47,7 +48,7 @@ export default function AboutPage() {
             // If using a global CSS for .button-link-cta:
             // className="button-link-cta"
           >
-            Explore Volunteer Events
+            Explore Events
           </Link>
         </section>
       </main>

@@ -9,7 +9,7 @@ interface LayoutProps {
   pageTitle?: string;
 }
 
-export default function Layout({ children, pageTitle = "VolunteerConnect" }: LayoutProps) {
+export default function Layout({ children, pageTitle = "EasySignUpz" }: LayoutProps) {
   const { user, logout } = useAuth();
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
@@ -47,7 +47,7 @@ export default function Layout({ children, pageTitle = "VolunteerConnect" }: Lay
         <header className={`app-header ${!isHeaderVisible ? 'header-hidden' : ''}`}>
           <nav className="main-nav">
             <Link href="/">
-              <h1 className="logo-title">VolunteerConnect</h1>
+              <h1 className="logo-title">EasySignUpz</h1>
             </Link>
             <div className="nav-links">
               <form onSubmit={handleSearchSubmit} className="nav-search-form">
@@ -81,7 +81,7 @@ export default function Layout({ children, pageTitle = "VolunteerConnect" }: Lay
         </header>
         <main className="page-content">{children}</main>
         <footer className="app-footer">
-          <p>&copy; {new Date().getFullYear()} VolunteerConnect, Stowe, PA. Making a difference, together.</p>
+          <p>&copy; {new Date().getFullYear()} EasySignUpz, Pottstown, PA. Making a difference, together.</p>
           <p className="footer-inspiration">Inspired by yellow sticky notes and community spirit!</p>
         </footer>
       </div>

@@ -24,7 +24,7 @@ function MyApp({ Component, pageProps }: AppProps) {
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@300;400;700&family=Patrick+Hand&display=swap" rel="stylesheet" />
       </Head>
-      <Layout pageTitle={(Component as any).pageTitle || "VolunteerConnect"}> {/* Pass pageTitle if component defines it */}
+      <Layout pageTitle={(Component as any).pageTitle || "EasySignUpz"}> {/* Pass pageTitle if component defines it */}
         <Component {...pageProps} />
       </Layout>
     </AuthProvider>
